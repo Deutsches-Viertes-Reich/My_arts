@@ -2,75 +2,68 @@ import pygame
 import os
 
 
-class AssetLoader:
-    def __init__(self, assets_dir="assets"):
-        self.assets_dir = assets_dir
-        self.images = {}
-        self.bgms = {}
-        self.sfx = {}  # 効果音も将来的に追加可能
+class AssetManager:
+    def __init__(self):
+        self.base_path = "assets"
+        self.images = {}  # 画像キャッシュ用
+        self.sounds = {}  # 効果音キャッシュ用
 
-        pygame.mixer.init()  # サウンドを初期化
+        # 初期化時にmixerが準備されているか確認
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
 
-    def load_image(self, filename, scale=1.0):
-        """画像を読み込み、必要であればスケーリングする"""
+    # --- 画像・スプライト関連 ---
+    def get_image(self, filename, scale=None):
+        """画像を読み込み、キャッシュから返す（スケーリング対応）"""
         if filename not in self.images:
-            path = os.path.join(self.assets_dir, filename)
-            if not os.path.exists(path):
-                print(f"Warning: Image file not found: {path}")
-                # ファイルが見つからない場合はダミーのサーフェスを返す
-                # これにより、プログラムがクラッシュするのを防ぎます
-                dummy_surface = pygame.Surface((100, 100))
-                dummy_surface.fill((255, 0, 255))  # マゼンタ色で存在しないことを示す
-                self.images[filename] = dummy_surface
-                return dummy_surface
-
+            path = os.path.join(self.base_path, filename)
             try:
-                image = pygame.image.load(path).convert_alpha()  # 透明度を保持
-                if scale != 1.0:
-                    size = (int(image.get_width() * scale),
-                            int(image.get_height() * scale))
-                    image = pygame.transform.scale(image, size)
-                self.images[filename] = image
-            except pygame.error as e:
+                # convert_alpha()で透明度を最適化して読み込み
+                img = pygame.image.load(path).convert_alpha()
+                if scale:
+                    # scale=(width, height) のタプルでサイズ変更
+                    img = pygame.transform.scale(img, scale)
+                self.images[filename] = img
+            except Exception as e:
                 print(f"Error loading image {filename}: {e}")
-                dummy_surface = pygame.Surface((100, 100))
-                dummy_surface.fill((255, 0, 255))
-                self.images[filename] = dummy_surface
-                return dummy_surface
+                # エラー時は目立つ色のダミーを生成
+                dummy = pygame.Surface((64, 64))
+                dummy.fill((255, 0, 255))
+                return dummy
+
         return self.images[filename]
 
-    def load_bgm(self, filename):
-        """BGMファイルを読み込む (再生は別途行う)"""
-        if filename not in self.bgms:
-            path = os.path.join(self.assets_dir, filename)
-            if not os.path.exists(path):
-                print(f"Warning: BGM file not found: {path}")
-                self.bgms[filename] = None  # ファイルがない場合はNoneを格納
-                return None
-
-            try:
-                # BGMはパスを保存し、pygame.mixer.music.loadでロード
-                self.bgms[filename] = path
-            except pygame.error as e:
-                print(f"Error loading BGM {filename}: {e}")
-                self.bgms[filename] = None
-                return None
-        return self.bgms[filename]
-
-    def play_bgm(self, filename, loop=-1, volume=0.5):
-        """BGMを再生する"""
-        bgm_path = self.load_bgm(filename)
-        if bgm_path:
-            pygame.mixer.music.load(bgm_path)
+    # --- サウンド・BGM関連 ---
+    def play_bgm(self, filename, volume=0.5):
+        """BGM(.wav)をループ再生する"""
+        path = os.path.join(self.base_path, filename)
+        if os.path.exists(path):
+            pygame.mixer.music.load(path)
             pygame.mixer.music.set_volume(volume)
-            pygame.mixer.music.play(loop)
+            pygame.mixer.music.play(-1)  # -1は無限ループ
         else:
-            print(f"Cannot play BGM: {filename} (file not loaded or found)")
+            print(f"BGM not found: {path}")
 
-    def stop_bgm(self):
-        """BGMを停止する"""
-        pygame.mixer.music.stop()
+    def get_sfx(self, filename):
+        """効果音(.wav)をロードしてSoundオブジェクトを返す"""
+        if filename not in self.sounds:
+            path = os.path.join(self.base_path, filename)
+            if os.path.exists(path):
+                self.sounds[filename] = pygame.mixer.Sound(path)
+            else:
+                print(f"SFX not found: {path}")
+                return None
+        return self.sounds[filename]
 
-    def get_image(self, filename):
-        """読み込んだ画像を返す"""
-        return self.images.get(filename)
+# --- スプライトクラスのベース (RPG風のキャラ表示用) ---
+
+
+class GameSprite(pygame.sprite.Sprite):
+    def __init__(self, image, pos):
+        super().__init__()
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.topleft = pos
+
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)

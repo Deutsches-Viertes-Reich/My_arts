@@ -1,141 +1,158 @@
 import pygame
 import sys
-import random
-from parts import ALL_PARTS
+from assets_loading_system import AssetManager
+from your_ship import Player  # ファイル名を your_ship.py に合わせました
+from enemy import EnemyShip
+from gacha import spin_gacha
+from parts import HULL_DATA, MAIN_CANNONS, ANTI_AIR
 
-# --- 初期設定 ---
-pygame.init()
+# --- 定数設定 ---
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("戦艦パーツガチャ")
-clock = pygame.time.Clock()
+FPS = 30
 
-# カラー設定
+# カラー
 WHITE = (255, 255, 255)
 BLACK = (20, 20, 25)
 GREEN = (100, 255, 100)
+RED = (255, 100, 100)
 GOLD = (255, 215, 0)
-GRAY = (150, 150, 150)
-
-# フォント設定 (日本語が表示できるフォントを指定)
-# Windowsの場合は "msgothic", Macの場合は "hiraginosansgb" など
-FONT_NAME = "msgothic" if sys.platform == "win32" else "applesymbol"
-font_m = pygame.font.SysFont(FONT_NAME, 30)
-font_l = pygame.font.SysFont(FONT_NAME, 50)
-font_s = pygame.font.SysFont(FONT_NAME, 20)
-
-# --- ガチャロジック ---
-RARITY_WEIGHTS = {"N": 40, "R": 30, "SR": 15, "SSR": 10, "LEGEND": 5}
 
 
-def get_parts_by_rarity(rarity):
-    pool = []
-    # 船体
-    for ship_type in ALL_PARTS["hull"]:
-        for item in ALL_PARTS["hull"][ship_type]:
-            if item["rarity"] == rarity:
-                pool.append(item)
-    # その他
-    categories = ["main_cannon", "secondary_cannon", "anti_air",
-                  "bridge", "captain", "armor", "engine", "item", "skill"]
-    for cat in categories:
-        for item in ALL_PARTS[cat]:
-            if item["rarity"] == rarity:
-                pool.append(item)
-    return pool
+class GameMaster:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("艦隊RPG - 戦略ガチャバトル")
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont("msgothic", 24)
 
+        self.assets = AssetManager()
+        self.player = Player()
+        self.state = "MENU"  # MENU, GACHA, BATTLE
 
-def spin_gacha(times):
-    results = []
-    rarities = list(RARITY_WEIGHTS.keys())
-    weights = list(RARITY_WEIGHTS.values())
-    for _ in range(times):
-        chosen_rarity = random.choices(rarities, weights=weights, k=1)[0]
-        pool = get_parts_by_rarity(chosen_rarity)
-        results.append(random.choice(pool) if pool else random.choice(
-            get_parts_by_rarity("N")))
-    return results
+        # メニュー管理
+        self.menu_options = ["ガチャを引く", "戦闘開始", "終了"]
+        self.battle_options = ["たたかう", "のうりょく", "アイテム", "にげる"]
+        self.selected_idx = 0
 
-# --- メインループ ---
+        # 戦闘用データ
+        self.current_enemy = None
 
+    def create_enemy(self):
+        """敵艦を生成（疑似AI搭載）"""
+        # parts.pyのデータを使って敵を構成
+        self.current_enemy = EnemyShip(
+            "駆逐艦ハエタタキ",
+            HULL_DATA["駆逐艦"][0],
+            main_cannon=MAIN_CANNONS[0],
+            anti_air=ANTI_AIR[1]
+        )
 
-def main():
-    menu_options = ["単発ガチャを引く", "10連ガチャを引く", "終了"]
-    selected_index = 0
-    gacha_results = []
-    state = "MENU"  # "MENU" か "RESULT"
+    def draw_text(self, text, x, y, color=WHITE, center=False):
+        surf = self.font.render(text, True, color)
+        rect = surf.get_rect(topleft=(x, y))
+        if center:
+            rect.centerx = x
+        self.screen.blit(surf, rect)
 
-    while True:
-        screen.fill(BLACK)
+    def run(self):
+        # BGM開始（assetsにwaveファイルがある想定）
+        self.assets.play_bgm("menu_bgm.wav")
 
+        while True:
+            self.screen.fill(BLACK)
+            self.handle_events()
+
+            if self.state == "MENU":
+                self.draw_menu()
+            elif self.state == "BATTLE":
+                self.draw_battle()
+
+            pygame.display.flip()
+            self.clock.tick(FPS)
+
+    def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
             if event.type == pygame.KEYDOWN:
-                if state == "MENU":
-                    if event.key == pygame.K_UP:
-                        selected_index = (
-                            selected_index - 1) % len(menu_options)
-                    elif event.key == pygame.K_DOWN:
-                        selected_index = (
-                            selected_index + 1) % len(menu_options)
-                    elif event.key == pygame.K_RETURN:
-                        if selected_index == 0:
-                            gacha_results = spin_gacha(1)
-                            state = "RESULT"
-                        elif selected_index == 1:
-                            gacha_results = spin_gacha(10)
-                            state = "RESULT"
-                        elif selected_index == 2:
-                            pygame.quit()
-                            sys.exit()
+                if event.key == pygame.K_UP:
+                    self.selected_idx = (
+                        self.selected_idx - 1) % self.get_current_options_len()
+                elif event.key == pygame.K_DOWN:
+                    self.selected_idx = (
+                        self.selected_idx + 1) % self.get_current_options_len()
+                elif event.key == pygame.K_RETURN:
+                    self.execute_selection()
 
-                elif state == "RESULT":
-                    if event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
-                        state = "MENU"
+    def get_current_options_len(self):
+        if self.state == "MENU":
+            return len(self.menu_options)
+        if self.state == "BATTLE":
+            return len(self.battle_options)
+        return 1
 
-        # --- 描画処理 ---
-        if state == "MENU":
-            title = font_l.render("戦艦パーツガチャ", True, WHITE)
-            screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 100))
+    def execute_selection(self):
+        if self.state == "MENU":
+            if self.selected_idx == 0:  # ガチャ
+                results = spin_gacha(1)
+                # 当たったものをとりあえずhullに装備する例
+                self.player.equip("hull", results[0])
+                print(f"獲得: {results[0]['name']}")
+            elif self.selected_idx == 1:  # 戦闘開始
+                self.create_enemy()
+                self.state = "BATTLE"
+                self.selected_idx = 0
+                self.assets.play_bgm("battle_bgm.wav")
+            elif self.selected_idx == 2:
+                pygame.quit()
+                sys.exit()
 
-            for i, option in enumerate(menu_options):
-                color = GREEN if i == selected_index else GRAY
-                prefix = "> " if i == selected_index else "  "
-                text = font_m.render(prefix + option, True, color)
-                screen.blit(text, (SCREEN_WIDTH//2 - 150, 250 + i * 60))
+        elif self.state == "BATTLE":
+            if self.selected_idx == 0:  # たたかう
+                damage = max(
+                    10, self.player.stats["atk"] - self.current_enemy.stats["def"])
+                self.current_enemy.take_damage(damage)
+                # 敵の反撃（疑似AI）
+                enemy_action = self.current_enemy.choose_action(
+                    self.player.stats)
+                print(f"敵の行動: {enemy_action}")
+                if self.current_enemy.is_defeated():
+                    self.state = "MENU"
+                    self.assets.play_bgm("menu_bgm.wav")
 
-            hint = font_s.render("矢印キーで選択 / Enterで決定", True, GRAY)
-            screen.blit(hint, (SCREEN_WIDTH//2 - hint.get_width()//2, 500))
+    def draw_menu(self):
+        self.draw_text("艦隊戦略メインメニュー", SCREEN_WIDTH//2, 100, GOLD, True)
+        for i, opt in enumerate(self.menu_options):
+            color = GREEN if i == self.selected_idx else WHITE
+            prefix = "> " if i == self.selected_idx else "  "
+            self.draw_text(prefix + opt, SCREEN_WIDTH //
+                           2, 250 + i*40, color, True)
 
-        elif state == "RESULT":
-            header = font_m.render(
-                f"ガチャ結果 ({len(gacha_results)}連)", True, GOLD)
-            screen.blit(header, (50, 50))
+    def draw_battle(self):
+        # 敵の描画（assets/enemy1.png）
+        enemy_img = self.assets.get_image("enemy1.png", scale=(200, 150))
+        self.screen.blit(enemy_img, (SCREEN_WIDTH//2 - 100, 100))
 
-            for i, item in enumerate(gacha_results):
-                rarity_color = GOLD if item['rarity'] in [
-                    "SSR", "LEGEND"] else WHITE
-                # 10連の結果を2列に分けて表示
-                x = 50 if i < 5 else 400
-                y = 120 + (i % 5) * 70
+        # ステータス表示
+        self.draw_text(f"ENEMY: {self.current_enemy.name}", 500, 50, RED)
+        self.draw_text(f"HP: {self.current_enemy.current_hp}", 500, 80)
 
-                rarity_text = font_s.render(
-                    f"[{item['rarity']}]", True, rarity_color)
-                name_text = font_m.render(item['name'], True, WHITE)
+        self.draw_text(f"PLAYER HP: {self.player.stats['hp']}", 50, 450, GREEN)
 
-                screen.blit(rarity_text, (x, y))
-                screen.blit(name_text, (x, y + 25))
-
-            footer = font_s.render("Enterキーでメニューに戻る", True, GRAY)
-            screen.blit(footer, (SCREEN_WIDTH//2 - footer.get_width()//2, 550))
-
-        pygame.display.flip()
-        clock.tick(30)
+        # コマンドウィンドウ
+        pygame.draw.rect(self.screen, WHITE, (50, 480, 700, 100), 2)
+        for i, opt in enumerate(self.battle_options):
+            color = GREEN if i == self.selected_idx else WHITE
+            x = 100 + (i % 2) * 200
+            y = 500 + (i // 2) * 30
+            prefix = "> " if i == self.selected_idx else "  "
+            self.draw_text(prefix + opt, x, y, color)
 
 
 if __name__ == "__main__":
-    main()
+    game = GameMaster()
+    game.run()
