@@ -53,16 +53,15 @@ class GameMaster:
                     self.execute_menu()
 
     def execute_menu(self):
-        if self.idx == 0:  # ガチャ
-            parts = spin_gacha(1)
-            for p in parts:
-                self.player.add_to_inventory(p)
-            print(f"所持品に追加: {parts[0]['name']}")
-        elif self.idx == 1:
+        if self.idx == 0:  # ガチャを引く
+            new_items = spin_gacha(1)
+            for item in new_items:
+                # ここで Player の inventory に追加！
+                self.player.add_to_inventory(item)
+                print(f"【獲得】: {item['name']} (レア度: {item['rarity']})")
+
+        elif self.idx == 1:  # 編成画面へ
             self.state = "ASSEMBLY"
-        elif self.idx == 3:
-            pygame.quit()
-            sys.exit()
 
     def draw_menu(self):
         for i, opt in enumerate(self.options):
