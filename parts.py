@@ -5,7 +5,7 @@ def set_cat(parts, category):
     return parts
 
 
-# 1. 船体（Hull）データ
+# 1. 船体 (Hull) - 隊長提供の全リスト
 HULL_RAW = {
     "駆逐艦": [
         {"name": "のぶしゃお", "atk": 0, "def": 5, "hp": 120,
@@ -157,15 +157,13 @@ HULL_RAW = {
     ]
 }
 
-# 船体を平坦なリストに変換
 HULLS = []
 for type_name, list_data in HULL_RAW.items():
     for h in list_data:
-        h["category"] = "hull"
-        h["ship_type"] = type_name
+        h.update({"category": "hull", "ship_type": type_name})
         HULLS.append(h)
 
-# 2. 主砲 (Main Cannon)
+# 2. 主砲 (Main) - 隊長提供リスト
 MAIN_CANNONS = set_cat([
     {"name": "豆鉄砲", "atk": 5, "def": 0, "hp": 0, "spd": -2, "rarity": "N"},
     {"name": "パチンコ", "atk": 7, "def": 0, "hp": 0, "spd": -1, "rarity": "N"},
@@ -250,7 +248,7 @@ MAIN_CANNONS = set_cat([
      "spd": -500, "rarity": "LEGEND"},
 ], "main_cannon")
 
-# 3. 副砲 (Secondary Cannon)
+# 3. 副砲 (Secondary) - 隊長提供リスト
 SECONDARY_CANNONS = set_cat([
     {"name": "石ころ投石機", "atk": 5, "def": 0, "hp": 0, "spd": -2, "rarity": "N"},
     {"name": "ビー●マン", "atk": 1, "def": 0, "hp": 0, "spd": -1, "rarity": "N"},
@@ -270,7 +268,29 @@ SECONDARY_CANNONS = set_cat([
      "spd": -200, "rarity": "LEGEND"},
 ], "secondary_cannon")
 
-# 4. 装甲 (Armor) ※対空も装甲スロットに統合
+# 4. 対空 (Anti-Air) - ★新規拡張
+ANTI_AIRS = set_cat([
+    {"name": "ハエたたき", "atk": 2, "def": 0, "hp": 0, "spd": -1, "rarity": "N"},
+    {"name": "うちわ", "atk": 1, "def": 5, "hp": 0, "spd": 2, "rarity": "N"},
+    {"name": "虫取り網", "atk": 3, "def": 2, "hp": 0, "spd": 0, "rarity": "N"},
+    {"name": "25mm三連装機銃", "atk": 30, "def": 50, "hp": 0, "spd": -5, "rarity": "R"},
+    {"name": "VADS", "atk": 400, "def": 800,
+        "hp": 100, "spd": -30, "rarity": "SSR"},
+    {"name": "神の息吹", "atk": 1500, "def": 2000,
+        "hp": 1000, "spd": 100, "rarity": "LEGEND"},
+], "anti_air")
+
+# 5. 艦長 (Captain) - ★新規拡張
+CAPTAINS = set_cat([
+    {"name": "近所の猫", "atk": 2, "def": 2, "hp": 10, "spd": 20, "rarity": "N"},
+    {"name": "新米少尉", "atk": 15, "def": 15, "hp": 50, "spd": 5, "rarity": "R"},
+    {"name": "熱血の指揮官", "atk": 400, "def": 200,
+        "hp": 500, "spd": 30, "rarity": "SSR"},
+    {"name": "宇宙の真理を知る者", "atk": 5000, "def": 5000,
+        "hp": 10000, "spd": 300, "rarity": "LEGEND"},
+], "captain")
+
+# 6. 装甲 (Armor) - 隊長提供リスト
 ARMORS = set_cat([
     {"name": "段ボール", "atk": 0, "def": 2, "hp": 10, "spd": 5, "rarity": "N"},
     {"name": "強化プラスチック", "atk": 0, "def": 20, "hp": 100, "spd": -5, "rarity": "R"},
@@ -279,30 +299,47 @@ ARMORS = set_cat([
         "hp": 1000, "spd": -100, "rarity": "SSR"},
     {"name": "オリハルコン", "atk": 50, "def": 1500,
         "hp": 5000, "spd": 0, "rarity": "LEGEND"},
-    {"name": "ハエたたき", "atk": 2, "def": 0, "hp": 0, "spd": -1, "rarity": "N"},
     {"name": "蚊取り線香", "atk": 500, "def": 1000,
         "hp": 500, "spd": -200, "rarity": "LEGEND"},
 ], "armor")
 
-# 5. エンジン (Engine)
+# 7. エンジン (Engine) - 隊長提供リスト
 ENGINES = set_cat([
     {"name": "人力(漕ぐ)", "atk": 0, "def": 0, "hp": 0, "spd": 10, "rarity": "N"},
+    {"name": "石炭ボイラー", "atk": 0, "def": 5, "hp": 20, "spd": 50, "rarity": "R"},
     {"name": "核融合炉", "atk": 50, "def": 50, "hp": 200, "spd": 250, "rarity": "SSR"},
     {"name": "ブラックホール", "atk": 200, "def": 100,
         "hp": 500, "spd": 800, "rarity": "LEGEND"},
 ], "engine")
 
-# ガチャ用全パーツ統合リスト
-ALL_PARTS_LIST = HULLS + MAIN_CANNONS + SECONDARY_CANNONS + ARMORS + ENGINES
-# parts.py の最後をこれにする
-ALL_PARTS_LIST = []
-if 'HULLS' in locals():
-    ALL_PARTS_LIST += HULLS
-if 'MAIN_CANNONS' in locals():
-    ALL_PARTS_LIST += MAIN_CANNONS
-if 'SECONDARY_CANNONS' in locals():
-    ALL_PARTS_LIST += SECONDARY_CANNONS
-if 'ARMORS' in locals():
-    ALL_PARTS_LIST += ARMORS
-if 'ENGINES' in locals():
-    ALL_PARTS_LIST += ENGINES
+# 8. 特殊アイテム (Item) - ★新規拡張
+ITEMS = set_cat([
+    {"name": "お守り", "atk": 0, "def": 10, "hp": 100, "spd": 0, "rarity": "N"},
+    {"name": "予備のネジ", "atk": 5, "def": 5, "hp": 50, "spd": 0, "rarity": "N"},
+    {"name": "ナノマシンリペア", "atk": 0, "def": 500,
+        "hp": 5000, "spd": 50, "rarity": "SSR"},
+    {"name": "賢者の石", "atk": 2000, "def": 2000,
+        "hp": 2000, "spd": 2000, "rarity": "LEGEND"},
+], "item")
+
+# 9. スキルカセット (Skill) - ★新規拡張
+SKILLS = set_cat([
+    {"name": "突撃の心得", "atk": 100, "def": -50, "hp": 0, "spd": 50, "rarity": "R"},
+    {"name": "全弾発射装置", "atk": 3000, "def": -1000,
+        "hp": 0, "spd": -500, "rarity": "LEGEND"},
+], "skill")
+
+# 10. 艦橋 (Bridge) - ★新規拡張
+BRIDGES = set_cat([
+    {"name": "プレハブ小屋", "atk": 0, "def": 5, "hp": 50, "spd": 0, "rarity": "N"},
+    {"name": "イージス・システム", "atk": 800, "def": 1500,
+        "hp": 2500, "spd": 50, "rarity": "SSR"},
+    {"name": "全知全能の展望塔", "atk": 3000, "def": 3000,
+        "hp": 5000, "spd": 200, "rarity": "LEGEND"},
+], "bridge")
+
+# --- 3. ガチャ用全パーツ統合リスト ---
+ALL_PARTS_LIST = (HULLS + MAIN_CANNONS + SECONDARY_CANNONS + ANTI_AIRS +
+                  CAPTAINS + ARMORS + ENGINES + ITEMS + SKILLS + BRIDGES)
+
+print(f"究極ロード完了: 合計 {len(ALL_PARTS_LIST)} 種類のアイテムを読み込みました。")
