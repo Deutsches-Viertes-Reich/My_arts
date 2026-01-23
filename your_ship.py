@@ -1,30 +1,34 @@
 class Player:
     def __init__(self):
-        # ガチャで引いた全パーツを保管する倉庫
+        # 倉庫
         self.inventory = []
-        # 現在装備しているパーツのスロット
+        # ここを10種類に完全固定！！
         self.equipment = {
             "hull": None,
             "main_cannon": None,
             "secondary_cannon": None,
-            "armor": None,
-            "engine": None
+            "anti_air": None,      # 追加
+            "captain": None,       # 追加
+            "armor": None,         # 追加
+            "engine": None,        # 追加
+            "item": None,          # 追加
+            "skill": None,         # 追加
+            "bridge": None         # 追加
         }
-        # 合計ステータス
-        self.stats = {"atk": 0, "def": 0, "hp": 100, "spd": 0}
+        # 初期ステータス (sp を追加)
+        self.stats = {"atk": 0, "def": 0, "hp": 100, "spd": 0, "sp": 0}
 
     def add_to_inventory(self, part):
-        """ガチャ結果を倉庫に放り込む"""
         self.inventory.append(part)
 
     def equip(self, slot_name, part):
-        """スロットに装備してステータスを更新"""
-        self.equipment[slot_name] = part
-        self.update_stats()
+        if slot_name in self.equipment:
+            self.equipment[slot_name] = part
+            self.update_stats()
 
     def update_stats(self):
-        """全装備の数値を合計する"""
-        new_stats = {"atk": 0, "def": 0, "hp": 0, "spd": 0}
+        # spを含む合計計算
+        new_stats = {"atk": 0, "def": 0, "hp": 0, "spd": 0, "sp": 0}
         for part in self.equipment.values():
             if part:
                 for key in new_stats:
