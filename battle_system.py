@@ -1,43 +1,48 @@
-import pygame
 import random
 
 
 class BattleSystem:
-    def __init__(self, player, enemy):
-        self.player = player
-        self.enemy = enemy
-        self.log = []  # 戦闘履歴
-        self.turn = 1
+    @staticmethod
+    def calculate_damage(attacker_stats, defender_stats, attack_type="main"):
+        """ダメージ計算式"""
+        base_atk = attacker_stats.get("atk", 0)
+        target_def = defender_stats.get("def", 0)
 
-    def player_attack(self, type="main"):
-        """プレイヤーの攻撃処理"""
-        if type == "main":
-            damage = max(0, self.player.stats["atk"] - self.enemy.stats["def"])
-            msg = f"主砲発射！ {self.enemy.name}に {damage} のダメージ！"
+        # 攻撃タイプによる倍率
+        multiplier = 1.2 if attack_type == "main" else 0.8
+
+        # ダメージ計算（最低1ダメージ保障）
+        damage = int((base_atk * multiplier) - (target_def / 2))
+        if damage < 1:
+            damage = 1
+
+        # クリティカル判定 (10%の確率)
+        is_critical = random.random() < 0.1
+        if is_critical:
+            damage = int(damage * 1.5)
+
+        return max(1, damage), is_critical
+
+    @staticmethod
+    def process_turn(attacker, defender, attack_type, scene):
+        """1ターン分の処理を回す"""
+        # 1. 攻撃側のダメージ計算
+        damage, crit = BattleSystem.calculate_damage(
+            attacker.stats, defender.stats, attack_type)
+
+        # 2. 防御側のHPを減らす
+        if hasattr(defender, "current_hp"):
+            defender.current_hp -= damage
         else:
-            damage = max(
-                0, (self.player.stats["atk"] // 2) - self.enemy.stats["def"])
-            msg = f"副砲掃射！ {self.enemy.name}に {damage} のダメージ！"
+            # プレイヤーのダメージはBattleScene側で管理しているのでここでは計算のみ
+            pass
 
-        self.enemy.take_damage(damage)
-        self.log.append(msg)
-        return damage
+        # 3. ログに反映
+        msg = "クリティカル！ " if crit else ""
+        msg += f"{damage}のダメージを与えた！"
+        scene.add_message(msg)
 
-    def enemy_turn(self):
-        """敵の疑似AIによる行動決定"""
-        # enemy.pyで定義したAIロジックを呼び出す
-        action = self.enemy.choose_action(self.player.stats)
-
-        damage = 0
-        if action == "main_cannon_attack":
-            damage = max(0, self.enemy.stats["atk"] - self.player.stats["def"])
-            msg = f"敵の主砲攻撃！ {damage} のダメージを受けた！"
-        elif action == "defend":
-            msg = f"{self.enemy.name}は防御を固めている！"
-        else:
-            msg = f"{self.enemy.name}は様子をうかがっている。"
-
-        self.player.stats["hp"] -= damage
-        self.log.append(msg)
-        self.turn += 1
-        return action
+        # 撃破判定
+        current_hp = defender.current_hp if hasattr(
+            defender, "current_hp") else defender.stats["hp"]
+        return current_hp <= 0

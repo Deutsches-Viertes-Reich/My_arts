@@ -1,73 +1,94 @@
 import pygame
+from battle_system import BattleSystem
 
 
 class BattleScene:
     def __init__(self, player, enemy):
         self.player = player
         self.enemy = enemy
+        # プレイヤーの現在HPを一時的に保存
+        self.player_current_hp = player.stats.get("hp", 100)
+
         self.font = pygame.font.SysFont("msgothic", 18)
         self.log_font = pygame.font.SysFont("msgothic", 16)
         self.messages = ["戦闘開始！ 敵艦を発見！"]
 
     def add_message(self, msg):
         self.messages.append(msg)
-        if len(self.messages) > 5:  # ログは最新5件まで
+        if len(self.messages) > 6:
             self.messages.pop(0)
 
     def draw(self, screen):
-        # 背景（海戦をイメージした暗い青）
         screen.fill((10, 20, 40))
+        # 敵のUI
+        self.draw_unit_ui(screen, self.enemy, 450, 50,
+                          (200, 50, 50), is_player=False)
+        # プレイヤーのUI
+        self.draw_unit_ui(screen, self.player, 50, 350,
+                          (50, 200, 50), is_player=True)
 
-        # --- 敵の情報 (上部) ---
-        self.draw_unit_ui(screen, self.enemy, 450, 50, (200, 50, 50))
-
-        # --- プレイヤーの情報 (下部) ---
-        self.draw_unit_ui(screen, self.player, 50, 350, (50, 200, 50))
-
-        # --- 戦闘ログの表示 ---
-        log_bg = pygame.Surface((700, 120))
+        # ログ枠
+        log_bg = pygame.Surface((700, 140))
         log_bg.set_alpha(150)
         log_bg.fill((0, 0, 0))
-        screen.blit(log_bg, (50, 200))
-
+        screen.blit(log_bg, (50, 190))
         for i, msg in enumerate(self.messages):
             txt = self.log_font.render(msg, True, (255, 255, 255))
-            screen.blit(txt, (70, 210 + i * 20))
+            screen.blit(txt, (70, 200 + i * 20))
 
-        # --- 操作ガイド ---
         guide = self.font.render(
-            " [1]:主砲攻撃  [2]:副砲攻撃  [ESC]:撤退 ", True, (255, 255, 0))
-        screen.blit(guide, (250, 530))
+            "[1]:主砲  [2]:副砲  [ESC]:撤退", True, (255, 255, 0))
+        screen.blit(guide, (250, 540))
 
-    def draw_unit_ui(self, screen, unit, x, y, color):
-        """HPバーと名前を描画"""
-        name = getattr(unit, "name", "味方艦隊")
-        # PlayerかEnemyかでHPの持ち方が違う場合に対応
-        current_hp = unit.current_hp if hasattr(
-            unit, "current_hp") else unit.stats["hp"]
-        max_hp = unit.stats["hp"]
+    def draw_unit_ui(self, screen, unit, x, y, color, is_player):
+        name = "味方艦隊" if is_player else getattr(unit, "name", "敵艦")
+        curr = self.player_current_hp if is_player else unit.current_hp
+        mx = unit.stats["hp"]
 
-        # 名前表示
-        name_txt = self.font.render(f"NAME: {name}", True, (255, 255, 255))
-        screen.blit(name_txt, (x, y))
+        txt = self.font.render(
+            f"{name} (ATK:{unit.stats['atk']} DEF:{unit.stats['def']})", True, (255, 255, 255))
+        screen.blit(txt, (x, y))
 
-        # HPバーの枠
-        pygame.draw.rect(screen, (100, 100, 100), (x, y + 30, 300, 20))
-        # HPバーの中身
-        hp_ratio = max(0, current_hp / max_hp) if max_hp > 0 else 0
-        pygame.draw.rect(screen, color, (x, y + 30, int(300 * hp_ratio), 20))
-        # 数値表示
-        hp_txt = self.font.render(
-            f"HP: {current_hp} / {max_hp}", True, (255, 255, 255))
+        # HPバー
+        pygame.draw.rect(screen, (80, 80, 80), (x, y+30, 300, 20))
+        ratio = max(0, curr / mx) if mx > 0 else 0
+        pygame.draw.rect(screen, color, (x, y+30, int(300 * ratio), 20))
+        hp_txt = self.font.render(f"HP: {curr} / {mx}", True, (255, 255, 255))
         screen.blit(hp_txt, (x + 100, y + 32))
 
     def handle_event(self, event):
-        """戦闘中のキー入力を受け付ける"""
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_1:
-                return "ATTACK_MAIN"
-            if event.key == pygame.K_2:
-                return "ATTACK_SUB"
-            if event.key == pygame.K_ESCAPE:
+            # 1キー または テンキーの1
+            if event.key == pygame.K_1 or event.key == pygame.K_KP1:
+                self.add_message("主砲、てーっ！！")
+                is_dead = BattleSystem.process_turn(
+                    self.player, self.enemy, "main", self)
+                if is_dead:
+                    self.add_message("敵艦の撃沈を確認！")
+                    return "VICTORY"
+                return self.enemy_turn()
+
+            # 2キー または テンキーの2
+            elif event.key == pygame.K_2 or event.key == pygame.K_KP2:
+                self.add_message("副砲、斉射！")
+                is_dead = BattleSystem.process_turn(
+                    self.player, self.enemy, "sub", self)
+                if is_dead:
+                    self.add_message("目標、沈黙。")
+                    return "VICTORY"
+                return self.enemy_turn()
+
+            elif event.key == pygame.K_ESCAPE:
                 return "ESCAPE"
+        return None
+
+    def enemy_turn(self):
+        self.add_message("敵艦の反撃！")
+        damage, _ = BattleSystem.calculate_damage(
+            self.enemy.stats, self.player.stats)
+        self.player_current_hp -= damage
+        self.add_message(f"味方艦に{damage}の被害！")
+        if self.player_current_hp <= 0:
+            self.add_message("大破、航行不能... 撤退します！")
+            return "DEFEAT"
         return None
