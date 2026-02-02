@@ -1,7 +1,7 @@
 import random
 
 
-class BattleSystem:
+class BattleScene:
     @staticmethod
     def calculate_damage(attacker_stats, defender_stats, defender_name="", attack_type="main"):
         """
