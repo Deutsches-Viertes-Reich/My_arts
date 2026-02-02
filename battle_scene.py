@@ -1,106 +1,86 @@
-import pygame
-from battle_system import BattleSystem
-from assets_loading_system import AssetManager
+import random
 
 
-class BattleScene:
-    def __init__(self, player, enemy):
-        self.player = player
-        self.enemy = enemy
-        self.player_current_hp = player.stats.get("hp", 100)
+class BattleSystem:
+    @staticmethod
+    def calculate_damage(attacker_stats, defender_stats, defender_name="", attack_type="main"):
+        """
+        隊長指定の計算式: ダメージ = 攻撃力 * (100 / (100 + 防御力))
+        """
+        # ステータス取得（最低値1を保証して0除算エラーを防止）
+        atk = max(1, attacker_stats.get("atk", 1))
+        defn = max(0, defender_stats.get("def", 0))
 
-        self.font = pygame.font.SysFont("msgothic", 18)
-        self.log_font = pygame.font.SysFont("msgothic", 16)
-        self.messages = ["戦闘開始！ 敵艦を発見！"]
+        # --- 1. 雪風専用の特殊回避ロジック ---
+        # 物理法則を超えたしぶとさを再現（30%の確率で強制1ダメージ）
+        if "雪風" in defender_name:
+            if random.random() < 0.3:
+                return 1, False
 
-        # --- サウンド管理 ---
-        self.assets = AssetManager()
+        # --- 2. 攻撃タイプによる倍率補正 ---
+        # 主砲は一撃が重く、副砲は手数が多いため軽く設定
+        multiplier = 1.2 if attack_type == "main" else 0.8
+        modified_atk = atk * multiplier
 
-        # BGM再生 (battle_bgm.mp3)
-        self.assets.play_bgm("battle_bgm.wav", volume=0.3)
+        # --- 3. メイン計算式 (防御減衰) ---
+        # ダメージ = 攻撃力 * (100 / (100 + 防御力))
+        damage_ratio = 100 / (100 + defn)
+        base_damage = modified_atk * damage_ratio
 
-        # 効果音（主砲と副砲で使い分ける場合）
-        self.sfx_main = self.assets.get_sfx("main_shot.wav")  # 主砲音
-        self.sfx_sub = self.assets.get_sfx("sub_shot.wav")   # 副砲音
+        # --- 4. クリティカル判定 (10%の確率でダメージ1.5倍) ---
+        is_critical = random.random() < 0.1
+        if is_critical:
+            base_damage *= 1.5
 
-    def add_message(self, msg):
-        self.messages.append(msg)
-        if len(self.messages) > 6:
-            self.messages.pop(0)
+        # --- 5. 最終調整 (乱数によるゆらぎ ±10%) ---
+        final_damage = int(base_damage * random.uniform(0.9, 1.1))
 
-    def draw(self, screen):
-        screen.fill((10, 20, 40))
-        # 敵とプレイヤーのUI描画
-        self.draw_unit_ui(screen, self.enemy, 450, 50,
-                          (200, 50, 50), is_player=False)
-        self.draw_unit_ui(screen, self.player, 50, 350,
-                          (50, 200, 50), is_player=True)
+        # 最低でも1ダメージは与える
+        return max(1, final_damage), is_critical
 
-        # ログ枠
-        log_bg = pygame.Surface((700, 140))
-        log_bg.set_alpha(150)
-        log_bg.fill((0, 0, 0))
-        screen.blit(log_bg, (50, 190))
-        for i, msg in enumerate(self.messages):
-            txt = self.log_font.render(msg, True, (255, 255, 255))
-            screen.blit(txt, (70, 200 + i * 20))
+    @staticmethod
+    def process_turn(attacker, defender, attack_type, scene):
+        """
+        1ターン分の戦闘計算と反映を行う
+        """
+        # 名前を取得（ログ表示用）
+        def_name = getattr(defender, "name", "敵艦")
 
-        guide = self.font.render(
-            "[1]:主砲  [2]:副砲  [ESC]:撤退", True, (255, 255, 0))
-        screen.blit(guide, (250, 540))
+        # ダメージ計算実行
+        damage, crit = BattleSystem.calculate_damage(
+            attacker.stats,
+            defender.stats,
+            def_name,
+            attack_type
+        )
 
-    def draw_unit_ui(self, screen, unit, x, y, color, is_player):
-        name = "味方艦隊" if is_player else getattr(unit, "name", "敵艦")
-        curr = self.player_current_hp if is_player else unit.current_hp
-        mx = unit.stats["hp"]
-        txt = self.font.render(
-            f"{name} (ATK:{unit.stats['atk']} DEF:{unit.stats['def']})", True, (255, 255, 255))
-        screen.blit(txt, (x, y))
-        pygame.draw.rect(screen, (80, 80, 80), (x, y + 30, 300, 20))
-        ratio = max(0, curr / mx) if mx > 0 else 0
-        pygame.draw.rect(screen, color, (x, y + 30, int(300 * ratio), 20))
-        hp_txt = self.font.render(f"HP: {curr} / {mx}", True, (255, 255, 255))
-        screen.blit(hp_txt, (x + 100, y + 32))
+        # 防御側のHPを減らす
+        # EnemyShipクラスならtake_damageメソッドを使用、Playerなら直接減らす
+        if hasattr(defender, "take_damage"):
+            defender.take_damage(damage)
+        elif hasattr(scene, "player_current_hp") and defender == scene.player:
+            scene.player_current_hp -= damage
+        else:
+            # どちらでもない場合は直接 stats を操作（フォールバック）
+            if hasattr(defender, "current_hp"):
+                defender.current_hp -= damage
 
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            # --- 1: 主砲 ---
-            if event.key == pygame.K_1 or event.key == pygame.K_KP1:
-                if self.sfx_main:
-                    self.sfx_main.play()  # 主砲発射音のみ
-                self.add_message("主砲、てーっ！！")
-                is_dead = BattleSystem.process_turn(
-                    self.player, self.enemy, "main", self)
-                if is_dead:
-                    self.add_message("敵艦の撃沈を確認！")
-                    return "VICTORY"
-                return self.enemy_turn()
+        # 戦闘ログにメッセージを追加
+        msg = ""
+        if crit:
+            msg += "★会心の一撃！ "
 
-            # --- 2: 副砲 ---
-            elif event.key == pygame.K_2 or event.key == pygame.K_KP2:
-                if self.sfx_sub:
-                    self.sfx_sub.play()  # 副砲発射音のみ
-                self.add_message("副砲、斉射！")
-                is_dead = BattleSystem.process_turn(
-                    self.player, self.enemy, "sub", self)
-                if is_dead:
-                    self.add_message("目標、沈黙。")
-                    return "VICTORY"
-                return self.enemy_turn()
+        # 攻撃側がプレイヤーか敵かでログの書き方を変える
+        if defender == scene.player:
+            msg += f"味方艦は {damage} の被害を受けた！"
+        else:
+            msg += f"{def_name} に {damage} のダメージを与えた！"
 
-            elif event.key == pygame.K_ESCAPE:
-                pygame.mixer.music.stop()
-                return "ESCAPE"
-        return None
+        scene.add_message(msg)
 
-    def enemy_turn(self):
-        self.add_message("敵艦の反撃！")
-        damage, _ = BattleSystem.calculate_damage(
-            self.enemy.stats, self.player.stats)
-        self.player_current_hp -= damage
-        self.add_message(f"味方艦に {damage} の被害！")
-        if self.player_current_hp <= 0:
-            self.add_message("大破、航行不能... 撤退します！")
-            pygame.mixer.music.stop()
-            return "DEFEAT"
-        return None
+        # 撃破判定（HPが0以下になったらTrueを返す）
+        curr_hp = getattr(defender, "current_hp", 0)
+        if defender == scene.player:
+            curr_hp = scene.player_current_hp
+
+        return curr_hp <= 0
