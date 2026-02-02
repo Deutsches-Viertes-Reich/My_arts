@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 from assets_loading_system import AssetManager
 from your_ship import Player
 from assembly import AssemblyScene
@@ -12,9 +13,9 @@ import parts
 class GameMaster:
     def __init__(self):
         pygame.init()
-        # 画面設定（800x600）
+        # 画面設定
         self.screen = pygame.display.set_mode((800, 600))
-        pygame.display.set_caption("艦隊RPG：10スロット・バトル実装版")
+        pygame.display.set_caption("艦隊RPG：10スロット・レジェンドバトル版")
         self.clock = pygame.time.Clock()
 
         # システム初期化
@@ -35,58 +36,32 @@ class GameMaster:
         self.battle_view = None
 
     def run(self):
-        """メインループ：ここがゲームの心臓部です"""
+        """メインループ"""
         while True:
-            # 1. 入力の受付
             self.handle_input()
-
-            # 2. 画面のクリア
-            self.screen.fill((20, 20, 25))
-
-            # 3. 状態に応じた描画
-            if self.state == "MENU":
-                self.draw_menu()
-            elif self.state == "ASSEMBLY":
-                if self.assembly:
-                    self.assembly.draw(self.screen)
-            elif self.state == "BATTLE":
-                if self.battle_view:
-                    self.battle_view.draw(self.screen)
-
-            # 4. 画面更新
-            pygame.display.flip()
-            self.clock.tick(30)
+            self.update()
+            self.draw()
+            self.clock.tick(60)
 
     def handle_input(self):
-        """イベントを各シーンへ適切に振り分ける"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.quit_game()
 
-            # --- バトル中：最優先でbattle_viewにイベントを渡す ---
-            if self.state == "BATTLE":
-                if self.battle_view:
-                    res = self.battle_view.handle_event(event)
-                    # バトル終了判定
-                    if res in ["ESCAPE", "VICTORY", "DEFEAT"]:
-                        print(f"戦闘結果: {res}")
-                        self.state = "MENU"
-                continue  # バトル中は以降のメニュー処理をスキップ
-
-            # --- 編成中 ---
-            elif self.state == "ASSEMBLY":
-                if self.assembly:
-                    res = self.assembly.handle_event(event)
-                    if res == "MENU":
-                        self.state = "MENU"
-                continue
-
-            # --- メニュー中 ---
-            elif self.state == "MENU":
+            if self.state == "MENU":
                 self.handle_menu_input(event)
+            elif self.state == "ASSEMBLY":
+                res = self.assembly.handle_event(event)
+                if res == "MENU":
+                    self.state = "MENU"
+            elif self.state == "BATTLE":
+                res = self.battle_view.handle_event(event)
+                if res in ["VICTORY", "DEFEAT", "ESCAPE"]:
+                    print(f"戦闘終了: {res}")
+                    pygame.mixer.music.stop()  # 戦闘BGMを止める
+                    self.state = "MENU"
 
     def handle_menu_input(self, event):
-        """メインメニューでのキー操作"""
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
                 self.idx = (self.idx - 1) % len(self.options)
@@ -96,12 +71,11 @@ class GameMaster:
                 self.execute_menu()
 
     def execute_menu(self):
-        """メニュー項目の実行"""
         if self.idx == 0:  # ガチャ
-            new_items = spin_gacha(1)
-            for item in new_items:
-                self.player.add_to_inventory(item)
-                print(f"【獲得】: {item['name']}")
+            new_parts = spin_gacha(1)
+            for p in new_parts:
+                self.player.add_to_inventory(p)
+                print(f"入手: {p['name']}")
 
         elif self.idx == 1:  # 編成
             self.assembly = AssemblyScene(self.player)
@@ -109,9 +83,17 @@ class GameMaster:
 
         elif self.idx == 2:  # 出撃
             print("艦隊、抜錨！")
-            # 敵データの生成（parts.pyに依存）
-            enemy_hull = parts.HULL_RAW["駆須玖"][0] if "駆須玖" in parts.HULL_RAW else parts.HULL_RAW["駆逐艦"][0]
-            dummy_enemy = EnemyShip("深海偵察艦", enemy_hull)
+
+            # --- 敵の選定ロジック ---
+            boss_list = ["雪風", "大和", "武蔵", "長門", "赤城"]
+            # 30%の確率でボス出現、それ以外は雑魚敵
+            if random.random() < 0.3:
+                target_name = random.choice(boss_list)
+                dummy_enemy = EnemyShip.create_boss(target_name)
+            else:
+                # parts.py から適当な船体を選んで雑魚敵を生成
+                enemy_hull = parts.HULL_RAW["駆逐艦"][0]
+                dummy_enemy = EnemyShip("深海偵察艦", enemy_hull)
 
             # バトルシーンの初期化
             self.battle_view = BattleScene(self.player, dummy_enemy)
@@ -120,8 +102,22 @@ class GameMaster:
         elif self.idx == 3:  # 終了
             self.quit_game()
 
+    def update(self):
+        pass
+
+    def draw(self):
+        if self.state == "MENU":
+            self.screen.fill((30, 30, 50))
+            self.draw_menu()
+        elif self.state == "ASSEMBLY":
+            self.assembly.draw(self.screen)
+        elif self.state == "BATTLE":
+            self.battle_view.draw(self.screen)
+
+        pygame.display.flip()
+
     def draw_menu(self):
-        """メインメニューの画面描画"""
+        """メインメニューの描画"""
         title = self.font.render(
             "--- FLEET COMMANDER ---", True, (255, 215, 0))
         self.screen.blit(title, (240, 100))
@@ -130,13 +126,12 @@ class GameMaster:
             color = (0, 255, 150) if i == self.idx else (200, 200, 200)
             prefix = "▶ " if i == self.idx else "  "
             txt = self.font.render(prefix + opt, True, color)
-            self.screen.blit(txt, (320, 220 + i * 60))
+            self.screen.blit(txt, (300, 250 + i * 50))
 
-        # 現在のステータスを画面下に表示
-        s = self.player.stats
-        status_line = f"旗艦ステータス: HP {s['hp']} / ATK {s['atk']} / DEF {s['def']}"
-        status_txt = self.sub_font.render(status_line, True, (150, 150, 150))
-        self.screen.blit(status_txt, (50, 550))
+        # プレイヤーの簡易ステータス表示
+        hp_info = self.sub_font.render(
+            f"自艦HP: {self.player.stats['hp']}", True, (255, 255, 255))
+        self.screen.blit(hp_info, (50, 530))
 
     def quit_game(self):
         pygame.quit()

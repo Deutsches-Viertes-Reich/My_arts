@@ -17,7 +17,7 @@ class BattleScene:
         self.assets = AssetManager()
 
         # BGM再生 (battle_bgm.mp3)
-        self.assets.play_bgm("battle_bgm.mp3", volume=0.3)
+        self.assets.play_bgm("battle_bgm.wav", volume=0.3)
 
         # 効果音（主砲と副砲で使い分ける場合）
         self.sfx_main = self.assets.get_sfx("main_shot.wav")  # 主砲音
